@@ -34,6 +34,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     curl \
     git \
     tini \
+    python3 \
+    make \
+    g++ \
     unzip \
     && if [ "$INSTALL_CJK_FONTS" = "true" ]; then \
         apt-get install -y --no-install-recommends fonts-noto-cjk; \
@@ -56,16 +59,17 @@ COPY container/agent-runner/package.json container/agent-runner/bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
 
-# Install host-side src/ deps (better-sqlite3, @onecli-sh/sdk, cron-parser, etc.)
-# Use --ignore-scripts to skip lifecycle scripts (husky prepare, etc.)
-COPY package.json /tmp/host-package.json
-RUN --mount=type=cache,target=/root/.bun/install/cache \
+# Install host-side src/ deps
+# better-sqlite3 needs native build (node-pre-gyp downloads prebuilt binary)
+# Other deps are pure JS, installed with --ignore-scripts to skip husky prepare
+RUN --mount=type=cache,target=/root/.npm \
     mkdir -p /tmp/host-install && \
-    cp /tmp/host-package.json /tmp/host-install/package.json && \
     cd /tmp/host-install && \
-    bun install --production --ignore-scripts && \
+    npm install --save-exact better-sqlite3@11.10.0 && \
+    npm install --ignore-scripts "@clack/core@^1.2.0" "@clack/prompts@^1.2.0" \
+        "@onecli-sh/sdk@^0.3.1" "cron-parser@5.5.0" "kleur@^4.1.5" && \
     cp -r /tmp/host-install/node_modules/. /app/node_modules/ && \
-    rm -rf /tmp/host-install /tmp/host-package.json
+    rm -rf /tmp/host-install
 
 # Bake source into image (EasyPanel: no bind mount available)
 COPY src/ /app/src/
